@@ -201,12 +201,32 @@ Total: ~100K samples after quality filtering and deduplication.
 
 ---
 
+## Model Variants
+
+| Model | Base | Size | Best For |
+|:------|:-----|:-----|:---------|
+| `morningstar` | Qwen2.5-Coder-14B | 9 GB | Default — fast, great quality |
+| `morningstar-32b` | Qwen2.5-Coder-32B | 20 GB | Maximum quality (needs 20GB+ RAM) |
+| `morningstar-vision` | LLaVA 13B | 8 GB | Image analysis + code |
+
+```bash
+# Build all variants
+ollama create morningstar -f Modelfile              # 14B (default)
+ollama create morningstar-32b -f Modelfile.32b      # 32B (best quality)
+ollama create morningstar-vision -f Modelfile.vision # Vision
+```
+
+---
+
 ## Repository Structure
 
 ```
 MORNINGSTAR-14B-CODE/
-├── Modelfile              # Ollama model definition + system prompt (257 lines)
+├── Modelfile              # 14B model + system prompt v2
+├── Modelfile.32b          # 32B model (maximum quality)
+├── Modelfile.vision       # Vision/multimodal model
 ├── create_model.sh        # One-click build script for Ollama
+├── benchmark.sh           # Benchmark suite (20 coding tests)
 ├── train.py               # QLoRA fine-tuning script
 ├── create_dataset.py      # Dataset preparation pipeline
 ├── merge_and_export.py    # LoRA merge + GGUF export
