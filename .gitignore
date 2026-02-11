@@ -9,3 +9,7 @@ data/
 *.gguf
 wandb/
 .DS_Store
+
+# PWA
+pwa/node_modules/
+pwa/dist/
