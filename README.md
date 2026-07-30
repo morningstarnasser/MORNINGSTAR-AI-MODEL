@@ -173,8 +173,6 @@ curl http://127.0.0.1:8100/v1/chat/completions \
 
 ## Roadmap
 
-The costed strategy lives in
-[`docs/MORNINGSTAR_HYDRA_SWISS_MODEL_ROADMAP.md`](docs/MORNINGSTAR_HYDRA_SWISS_MODEL_ROADMAP.md):
 
 1. **Quality & local runtime** — benchmark, hardened router and Ollama integration. ✅
 2. **Data gate** — licenses, provenance, contamination verification. ✅
@@ -189,9 +187,7 @@ is stated transparently in the model card at release.
 
 ## Documentation
 
-- [`HYDRA_ARCHITECTURE.md`](HYDRA_ARCHITECTURE.md) — control plane, routing, parameter accounting
 - [`docs/MAC_MLX_TRAINING.md`](docs/MAC_MLX_TRAINING.md) — training the own domain model on Apple Silicon
-- [`docs/MORNINGSTAR_HYDRA_SWISS_MODEL_ROADMAP.md`](docs/MORNINGSTAR_HYDRA_SWISS_MODEL_ROADMAP.md) — release plan
 
 ## License
 
