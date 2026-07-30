@@ -1,0 +1,42 @@
+model: "$HYDRA_MODELS_DIR/qwen3-8b-4bit-545dc425"
+train: true
+data: "$HYDRA_TRAIN_DIR/data-ch4"
+
+fine_tune_type: lora
+optimizer: adamw
+num_layers: -1
+
+batch_size: 4
+grad_accumulation_steps: 4
+max_seq_length: 320
+grad_checkpoint: true
+mask_prompt: true
+
+iters: 100
+learning_rate: 1.0e-5
+
+lr_schedule:
+  name: cosine_decay
+  warmup: 5
+  warmup_init: 1.0e-7
+  arguments: [1.0e-5, 25, 1.0e-6]
+
+lora_parameters:
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.gate_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+  rank: 64
+  scale: 10.0
+  dropout: 0.05
+
+adapter_path: "$HYDRA_TRAIN_DIR/adapters-qwen3-8b-ch-r1-100"
+save_every: 25
+steps_per_report: 10
+steps_per_eval: 25
+val_batches: 20
+seed: 42

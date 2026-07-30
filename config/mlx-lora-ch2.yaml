@@ -1,0 +1,62 @@
+# Morningstar Hydra — LoRA auf CH-Fachdaten (MLX / Apple Silicon)
+#
+# Zweite Iteration nach dem Nullresultat vom 2026-07-25: Der generische Mix aus
+# `hf-expert-mixture.json` hat HydraCH nicht bewegt, weil er praktisch keine
+# Ueberschneidung mit dem Benchmark hatte (Rappen/Kanton/revDSG je 0x in 20074
+# Beispielen). Dieser Lauf trainiert genau die fehlenden Faehigkeiten aus
+# `scripts/build_ch_dataset.py`.
+#
+# Unterschiede zu config/mlx-lora-apertus8b.yaml:
+#   * Datenformat {"prompt", "completion"} statt {"text"} — damit greift
+#     mask_prompt. Entscheidend hier: bei privacy_policy stehen ~250 Prompt-Tokens
+#     einer einwortigen Antwort gegenueber; ohne Maskierung waere fast das gesamte
+#     Lernsignal blosses Nachplappern der Richtlinie.
+#   * max_seq_length 288 statt 1536 — laengstes Beispiel misst 267 Tokens.
+#   * batch 4 x grad_accum 4 = 16 Sequenzen pro Update (gleiche effektive
+#     Batchgroesse, aber deutlich kleineres Tokenbudget pro Schritt).
+#
+# Datenherkunft ist gegen HydraCH geprueft: 0 exakte Treffer und 0 Near-Dups
+# gegen dev (50 Faelle) UND hidden (200 Faelle), siehe
+# scripts/check_ch_contamination.py.
+
+model: "$HYDRA_MODELS_DIR/apertus-4b-instruct-mlx-int4"
+train: true
+data: "$HYDRA_TRAIN_DIR/data-ch2"
+
+fine_tune_type: lora
+optimizer: adamw
+num_layers: -1
+
+batch_size: 4
+grad_accumulation_steps: 4
+max_seq_length: 288
+grad_checkpoint: true
+mask_prompt: true       # Loss nur auf der Antwort
+
+iters: 600             # ~1 Epoche ueber 6271 Beispiele
+learning_rate: 1.0e-5
+
+lr_schedule:
+  name: cosine_decay
+  warmup: 60
+  warmup_init: 1.0e-7
+  arguments: [1.0e-5, 600, 1.0e-6]
+
+lora_parameters:
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+  rank: 16
+  scale: 20.0
+  dropout: 0.05
+
+adapter_path: "$HYDRA_TRAIN_DIR/adapters-ch2"
+save_every: 200
+steps_per_report: 20
+steps_per_eval: 100
+val_batches: 25
+seed: 42

@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "strategy": "curated_post_training_only",
+  "foundation_pretraining": false,
+  "runtime_unchanged": "NVIDIA NIM primary with NAS CPU fallback",
+  "train_only_if": "A held-out ablation beats the unmodified base model without regressing tool use or safety.",
+  "training_allowed": true,
+  "training_approval": {
+    "approved_by": "Ali",
+    "approved_at": "2026-07-25",
+    "compute": "lokaler Mac (M2 Max, 32 GB) via MLX — 0 CHF, kein GPU-Spend",
+    "base_model": "swiss-ai/Apertus-v1.1-4B-Instruct (MLX-INT4)",
+    "note": "Freigabe erfolgte fuer Training auf a local workstation statt RTX 3090/RunPod. Die vier Punkte unter required_before_training sind erfuellt: Revisionen aller sechs Quellen gepinnt und Sample-Fingerprints geschrieben ($HYDRA_TRAIN_DIR/data-hf/run_manifest.json), Eval-Overlap und Content-Hash-Overlap durch das Kontaminationsgate abgedeckt, Report signiert. Promotion bleibt an train_only_if gebunden — gemessene Baseline: 22/50 = 44% HydraCH-dev.",
+    "scripts": [
+      "scripts/build_mlx_dataset.py",
+      "scripts/train_mac.sh",
+      "scripts/eval_mac.sh"
+    ]
+  },
+  "run_2026_07_25_ch_round2": {
+    "verdict": "bestes Ergebnis — 39/50 = 78.0% (39/44 = 88.6% der erreichbaren Faelle)",
+    "daten": "scripts/build_ch_dataset.py mit 8400 Beispielen (kontrastive Kuerzelpaare, Subtraktionen nahe null, Labelgewichtung 40/35/25); alle Antworten unabhaengig nachgerechnet, 0 Kontamination gegen dev UND hidden",
+    "training": "config/mlx-lora-ch2.yaml, 600 iters, Val-Loss 1.040 -> 0.031",
+    "modell": "$HYDRA_MODELS_DIR/apertus-4b-ch2-600-fused",
+    "delta_zu_runde1": "nur chf_arithmetic 7/8 -> 8/8; Kantone und privacy_policy unveraendert",
+    "offene_grenze": "Faktenwissen generalisiert nicht ueber die Frageform: SG->'Schwyz', ZG->'Zürich', Zug->'Zug' bleiben falsch, obwohl 1800 Kantonsbeispiele (inkl. 400 kontrastive) trainiert wurden. Der Benchmark fragt in einer Formulierung, die im Training bewusst nicht vorkommt. Diese Formulierung zu uebernehmen waere Kontamination (>90% Shingle-Overlap) und wurde unterlassen. Echte Abhilfe: hoeherer LoRA-Rang oder breitere Formulierungsvielfalt."
+  },
+  "run_2026_07_25_ch_result": {
+    "verdict": "train_only_if ERFUELLT — Adapter schlaegt die Basis deutlich, keine Kategorie regressiert",
+    "baseline": "22/50 = 44.0%",
+    "ch_adapter_iter_200": "38/50 = 76.0%",
+    "ch_adapter_iter_400": "38/50 = 76.0% (identisch — nach ~800 gesehenen Beispielen ausgelernt)",
+    "erreichbares_maximum": "44/50 = 88% (tool_call strukturell blockiert) -> 38/44 = 86.4% der erreichbaren Faelle",
+    "per_category_delta": {
+      "chf_arithmetic": "2/8 -> 7/8",
+      "invoice_json": "5/8 -> 8/8",
+      "multilingual_json": "4/7 -> 7/7",
+      "canton_code": "2/5 -> 4/5",
+      "canton_name": "1/5 -> 3/5",
+      "privacy_policy": "2/5 -> 3/5",
+      "date_iso": "6/6 unveraendert",
+      "tool_call": "0/6 unveraendert (blockiert)"
+    },
+    "daten": "scripts/build_ch_dataset.py — 6464 synthetische Beispiele, alle Antworten mit scripts/check_ch_dataset.py unabhaengig nachgerechnet (100% korrekt)",
+    "kontamination": "0 exakte Treffer und 0 Near-Dups (>=80% Shingle-Overlap) gegen dev (50) UND hidden (200); hidden-Vergleich remote auf dem VPS gefahren. Erster Entwurf hatte 11 exakte + 711 Near-Dups, weil Benchmark-Formulierungen uebernommen worden waren — alle Formulierungen wurden daraufhin eigenstaendig neu geschrieben und die Richtlinie durch drei rotierende Eigenvarianten ersetzt.",
+    "training": "config/mlx-lora-ch.yaml, mask_prompt=true, 200 iters (~8 min), Val-Loss 0.846 -> 0.028",
+    "restfehler": "canton_name SG->Schwyz und ZG->Zuerich (verwechselbare Kuerzelpaare), canton_code Zug->'Zug' statt 'ZG', eine Subtraktion mit kleinem Ergebnis (106.16-102.96 -> 'CHF 0.00'), zweimal REVIEW statt ALLOW/DENY (Modell ist zu konservativ)",
+    "wichtig_messfalle": "mlx_lm.server 0.31.3 wendet --adapter-path NIE an (beim Start wird load('default_model', None, ...) gerufen, und _adapter_map.get(None) ist None). Adapter-Evals ueber den Server messen daher immer das Basismodell. Loesung: Adapter mit `mlx_lm.fuse` ins Modell backen und das fusionierte Modell evaluieren."
+  },
+  "run_2026_07_25_result": {
+    "verdict": "KEINE PROMOTION — train_only_if nicht erfuellt",
+    "baseline": "22/50 = 44.0% (Apertus-v1.1-4B-Instruct, ohne Adapter)",
+    "adapter_iter_600": "22/50 = 44.0% (bester Val-Loss 1.615)",
+    "adapter_iter_1400": "22/50 = 44.0%",
+    "identical_per_category": true,
+    "adapter_effective": "ja — Ausgaben aendern sich nachweislich (kompakteres JSON, \\u-escapes), der Adapter wird also geladen und wirkt; er trifft nur die geprueften Kriterien nicht besser",
+    "val_loss_curve": "1.681 -> 1.615 (iter 600, Minimum) -> 1.676 (iter 1200); Train-Loss faellt weiter auf 1.398 -> beginnendes Overfitting, Lauf bei iter 1400 abgebrochen",
+    "root_cause": "Der Datenmix hat praktisch keine Ueberschneidung mit dem Benchmark. In 20074 Trainingsbeispielen: 'Rappen' 0x, 'Kanton' 0x, 'Zuerich' 0x, 'revDSG' 0x, 'CHF' 1x; ~0.1% deutschsprachig. HydraCH prueft 41/50 Faelle auf de-CH plus fr-CH/it-CH mit Kantonen, Rappen-als-Ganzzahl und revDSG. Die sechs Quellen trainieren englischsprachiges Code/Math/Agent-Verhalten — dasselbe Nullergebnis waere auch auf T4/RunPod herausgekommen.",
+    "next_step": "Fuer HydraCH braucht es CH-spezifische Trainingsdaten (Kantone, Rappen-Arithmetik, ISO-Datum, revDSG-Formulierungen, de-CH/fr-CH/it-CH). Synthetisch erzeugbar, ABER zwingend gegen HydraCH dev+hidden auf Kontamination pruefen, bevor trainiert wird.",
+    "tool_call_note": "tool_call (6 Faelle) ist ueber mlx_lm.server generell nicht erreichbar (kein Tool-Parser fuer Apertus) -> Obergrenze 44/50 = 88%. Siehe docs/MAC_MLX_TRAINING.md."
+  },
+  "contamination_control": {
+    "status": "verified_clean",
+    "verified_at": "2026-07-24",
+    "report": "benchmarks/contamination-full-20260724.json",
+    "report_sha256": "3178ead1f4593df46a1217ce0a0425a9cc7317ecb6dc5e6b1d0033bfa0edd601",
+    "method": "stream every source vs eval universe (750 prompts/500 task-ids: HydraCH dev+hidden + SWE-bench + Berkeley-Function-Calling); exact content-hash, 5-word-shingle near-dup, upstream-provenance",
+    "rows_checked": 436565,
+    "hits": 0,
+    "promotable": true,
+    "note": "Sample-level contamination gate is GREEN. Ali hat das Training am 2026-07-25 auf dem lokalen Mac freigegeben (siehe training_approval); training_allowed steht seither auf true.",
+    "required_before_training": [
+      "materialize immutable source revisions and sample identifiers",
+      "remove upstream task IDs shared with every held-out evaluation set",
+      "remove normalized content-hash overlaps across train and evaluation data",
+      "write a signed contamination report and set training_allowed only after review"
+    ]
+  },
+  "sampling": {
+    "seed": 42,
+    "deduplicate": "sha256-normalized-user-assistant-content",
+    "keep_train_eval_separate": true,
+    "max_sequence_tokens": 16384
+  },
+  "sources": [
+    {
+      "dataset": "nvidia/OpenCodeInstruct",
+      "config": "train",
+      "split": "train",
+      "purpose": "code_sft",
+      "license": "cc-by-4.0",
+      "weight": 0.2,
+      "sample_cap": 120000,
+      "filters": [
+        "average_test_score >= 0.9",
+        "input and output are non-empty"
+      ],
+      "reason": "Five million code instruction pairs with executable unit-test metadata."
+    },
+    {
+      "dataset": "nvidia/OpenCodeReasoning",
+      "config": "split_0",
+      "split": "split_0",
+      "purpose": "code_reasoning",
+      "license": "cc-by-4.0",
+      "weight": 0.18,
+      "sample_cap": 100000,
+      "filters": [
+        "input, output and solution are non-empty",
+        "source license is in the approved allowlist",
+        "exclude held-out benchmark test splits"
+      ],
+      "reason": "735255 competitive-programming reasoning traces; split_0 is self-contained."
+    },
+    {
+      "dataset": "open-r1/OpenR1-Math-220k",
+      "config": "default",
+      "split": "train",
+      "purpose": "math_reasoning",
+      "license": "apache-2.0",
+      "weight": 0.18,
+      "sample_cap": 100000,
+      "filters": [
+        "correctness_count >= 1",
+        "all selected traces have is_reasoning_complete = true"
+      ],
+      "reason": "Verified math traces; the card reports default outperforming the easier extended subset for SFT."
+    },
+    {
+      "dataset": "open-thoughts/AgentTrove",
+      "config": "default",
+      "split": "train",
+      "purpose": "agent_trajectories",
+      "license": "apache-2.0",
+      "weight": 0.24,
+      "sample_cap": 120000,
+      "filters": [
+        "reject rows with missing or null reward",
+        "numeric reward == 1.0",
+        "keep successful tool trajectories only",
+        "exclude tasks used by the held-out evaluation suite"
+      ],
+      "reason": "1696847 tool-using trajectories across 219 sources in a consistent conversation format."
+    },
+    {
+      "dataset": "NousResearch/hermes-function-calling-v1",
+      "config": "func_calling",
+      "split": "train",
+      "purpose": "function_calling",
+      "license": "apache-2.0",
+      "weight": 0.12,
+      "sample_cap": 60000,
+      "filters": [
+        "valid tool schema",
+        "valid tool-call JSON",
+        "conversation contains user and assistant turns"
+      ],
+      "reason": "Native Hermes/Nous function-calling data aligned with the target agent runtime."
+    },
+    {
+      "dataset": "NousResearch/hermes-function-calling-v1",
+      "config": "json_mode_agentic",
+      "split": "train",
+      "purpose": "agent_json",
+      "license": "apache-2.0",
+      "weight": 0.08,
+      "sample_cap": 40000,
+      "filters": [
+        "valid JSON",
+        "conversation contains user and assistant turns"
+      ],
+      "reason": "Adds structured agent-output behavior without a separate low-provenance dataset."
+    }
+  ],
+  "evaluation_only": [
+    {
+      "dataset": "gorilla-llm/Berkeley-Function-Calling-Leaderboard",
+      "reason": "Function-calling benchmark; never mix into training."
+    },
+    {
+      "dataset": "SWE-bench/SWE-bench_Verified",
+      "reason": "Software-engineering benchmark; never mix into training."
+    }
+  ],
+  "excluded": [
+    {
+      "dataset": "nvidia/Nemotron-Post-Training-Dataset-v2",
+      "expected_state": "gated",
+      "reason": "Good candidate but gated; do not auto-accept external terms."
+    },
+    {
+      "dataset": "Salesforce/xlam-function-calling-60k",
+      "expected_state": "gated",
+      "reason": "Strong candidate but gated; do not use an unofficial mirror to bypass the gate."
+    },
+    {
+      "dataset": "Alibaba-NLP/WebShaper",
+      "expected_state": "missing_license",
+      "reason": "No license declared on the current Hugging Face card."
+    }
+  ],
+  "run_2026_07_25_reasoning_finding": {
+    "verdict": "Mischtraining gescheitert — ein Modell erreicht nicht beide Bestwerte. Empfehlung: Adapter-Switching.",
+    "matrix": {
+      "basis": {
+        "hydrach": "44.0%",
+        "gsm8k_0shot": "27.5%",
+        "gsm8k_fewshot": "46.7%"
+      },
+      "ch_only": {
+        "hydrach": "82.0%",
+        "gsm8k_0shot": "9.2%",
+        "gsm8k_fewshot": "35.0%"
+      },
+      "mix": {
+        "hydrach": "76.0%",
+        "gsm8k_0shot": "20.8%",
+        "gsm8k_fewshot": "26.7%"
+      }
+    },
+    "stil_vs_faehigkeit": "Die 9.2% des CH-Modells waren groesstenteils Antwortstil, nicht verlorene Faehigkeit: mit zwei ausgerechneten Beispielen im Prompt erreicht dasselbe Modell 35.0%. Realer Verlust ~12pp statt 18pp. Vor jeder Forgetting-Diagnose Few-Shot gegentesten.",
+    "ursache": "In den CH-Daten ist 'Domaene' identisch mit 'kurze Antwort'; die Korrelation wird mitgelernt. Fix: Laenge konditionieren (System-Prompt) + Teil der CH-Faelle mit sichtbarem Rechenweg.",
+    "empfehlung": "Adapter-Switching: Basis im Speicher, CH-Adapter nur an Pipeline-Schritten mit bekannter Formataufgabe. Liefert 82% und 46.7% gleichzeitig. Zusaetzlich: ISO-Datum/JSON-Schema/Rappen liessen sich per Constrained Decoding deterministisch loesen statt antrainieren.",
+    "beraten_durch": "the operator (hermes) und the operator (openclaw), unabhaengig konsultiert, im Kern uebereinstimmend",
+    "messhygiene": "Standardfehler ~±6pp bei 50 HydraCH-Faellen, ~±4pp bei 120 GSM8K. Unterschiede unter ~8pp sind Rauschen. Reasoning-Trainingsdaten gegen GSM8K geprueft: 0 exakte Treffer, 0 Near-Dups."
+  },
+  "run_2026_07_25_toolbridge": {
+    "verdict": "BESTWERT 44/50 = 88.0% — die letzten 6 Punkte ohne Retraining, allein durch Runtime-Fixes",
+    "stufen": {
+      "basis": "22/50 = 44.0%",
+      "ch_adapter": "41/50 = 82.0%",
+      "plus_toolbruecke": "44/50 = 88.0%"
+    },
+    "zwei_behobene_fehler": [
+      "Werkzeuge erreichten das Modell nie: der Standardweg reicht tools= an apply_chat_template, Apertus liest sie aber aus der developer-Rolle (content.formatted_tools). Im Prompt stand woertlich 'Tool Capabilities: disabled'.",
+      "Korrekte Aufrufe wurden nicht geparst: MLX leitet den Tool-Parser aus dem Template-Text ab, fuer Apertus greift kein bekanntes Muster."
+    ],
+    "gate_test": "Vor dem Bau die Faelle roh dekodieren (Vorschlag the operator): 3 von 6 lieferten mit `weather_lookup {\"city\": \"Basel\"}` fachlich exakt das Richtige, nur im falschen Format. Damit war der Parser gerechtfertigt.",
+    "loesung": "scripts/hydra_mlx_server.py — eigener OpenAI-kompatibler Server mit Tool-Bruecke (developer/formatted_tools rein, Apertus-Aufrufe raus als message.tool_calls). Laedt ausserdem Adapter zuverlaessig, anders als mlx_lm.server.",
+    "neue_obergrenze": "50/50 statt 44/50 — tool_call ist nicht mehr blockiert",
+    "restfehler": "3x tool_call (Modell lehnt ab statt calendar_lookup aufzurufen), 1x canton_name (SG), 1x invoice_json, 1x privacy_policy"
+  },
+  "run_2026_07_25_toolsystem": {
+    "verdict": "46/50 = 92.0% — Tool-System-Prompt bringt tool_call von 3/6 auf 5/6",
+    "stufen": {
+      "basis": "44.0%",
+      "ch_adapter": "82.0%",
+      "tool_bruecke": "88.0%",
+      "+tool_system_prompt": "92.0%"
+    },
+    "prompt_sha256_16": "f4a908c57490eb98",
+    "prompt_legitimitaet": "Nach the operator drei Tests: Herkunft = Aussage ueber die Laufzeit (waere auch ohne HydraCH wahr), Reichweite = half allen Faellen inkl. nicht inspizierter, Reihenfolge = vor der Vollmessung eingefroren. Ein 'Datumsangaben immer ISO'-Hinweis waere dagegen aus ch-tool-013 abgeleitet und damit Gaming — bewusst unterlassen.",
+    "negativtest": "6 Faelle ohne passendes Werkzeug geprueft: 0/6 unnoetige Aufrufe mit UND ohne System-Prompt. Die erhoehte Aufrufneigung hat keinen messbaren Preis.",
+    "restfehler": "1x tool_call (ISO-Format nur im Argument), 1x canton_name (SG), 1x invoice_json (Kopfzeilen-Kennung), 1x privacy_policy (DENY->REVIEW)",
+    "WARNUNG_INSTRUMENT": "Konsens the operator+the operator: Das Messinstrument ist vor dem Modell erschoepft. Bei n=50 betraegt der Standardfehler ~±4.6pp, das 95%-Intervall zu 92% reicht von ~84-98%. Unterschiede unter ~9pp sind nicht mehr aufloesbar; die letzten Entscheidungen hingen an 1-2 Faellen. KEIN weiterer Trainingslauf, bevor ein groesserer Benchmark steht.",
+    "naechste_schritte_konsens": [
+      "Label-Rauschen der Restfehler pruefen (Verdacht: privacy_policy und invoice_json haben unterspezifizierte Gold-Labels -> echte Obergrenze evtl. 46-48/50, nicht 50/50)",
+      "Benchmark v2: 150 dev / 300 hidden, >=20-25 Faelle je Kategorie, Negativfaelle fuer tool_call, gepaarte Vergleiche (McNemar) statt unabhaengiger Trefferquoten",
+      "Tool-Metrik zerlegen: Funktionswahl / Argumente schema-valide / Argumente fachlich korrekt",
+      "Qwen3-8B roh gegen den neuen Benchmark messen (Tool-Bruecke ist wiederverwendbar, Qwen3 hat natives Tool-Calling das mlx-lm parst) — erst danach 4B-vs-8B entscheiden",
+      "Constrained Decoding auf Argument-JSON statt nachtraeglicher Reparatur; deterministische 26-Kantone-Map im Produkt"
+    ]
+  }
+}

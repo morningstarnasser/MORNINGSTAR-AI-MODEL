@@ -1,0 +1,66 @@
+# Morningstar Hydra — Apertus QLoRA auf Apple Silicon (MLX)
+#
+# Portierung von cloud/kaggle_qlora_apertus8b.ipynb auf den M2 Max (32 GB).
+# Der Kaggle-Pfad braucht bitsandbytes (CUDA-only) und laeuft auf dem Mac nicht;
+# MLX quantisiert stattdessen selbst (siehe scripts/train_mac.sh).
+#
+# Abweichungen vom Kaggle-Notebook und ihr Grund:
+#   * Basis ist Apertus-v1.1-4B-Instruct statt Apertus-8B-2509. Das Notebook waehlte
+#     ein reines Basismodell ohne Instruction-Tuning: es beantwortet Fragen nicht,
+#     sondern plappert weiter, und muesste Chat-Verhalten erst von Null lernen.
+#     Inzwischen gibt es eine neuere Generation (v1.1) mit Instruct-Variante und
+#     eigenem chat_template. 4B statt 8B, weil der Mac bei 8B nur ~90-110 Token/s
+#     schafft — eine Epoche waere dort mehrtaegig.
+#   * scale 20.0 statt PEFT-alpha 32: MLX' `scale` ist ein absoluter Multiplikator,
+#     nicht alpha/rank. Die erprobte MLX-Kopplung ist scale 20 + lr 1e-5; Kaggles
+#     lr 2e-4 waere bei diesem scale rund zwanzigfach zu heiss.
+#   * keys statt "all-linear": explizite Modulpfade, weil Apertus wegen der
+#     xIELU-Aktivierung kein gate_proj hat (nur up_proj/down_proj).
+#   * batch 2 x grad_accum 8 = 16 Sequenzen pro Update — dieselbe effektive
+#     Batchgroesse wie Kaggle (1 x 16), nur anders aufgeteilt. Das Tokenbudget pro
+#     Batch bleibt bewusst klein: bei 131072 Vokabular kostet allein der
+#     Logit-Tensor ~0.5 GB pro 1000 Tokens.
+
+model: "$HYDRA_MODELS_DIR/apertus-4b-instruct-4bit"
+train: true
+data: "$HYDRA_TRAIN_DIR/data"
+
+fine_tune_type: lora
+optimizer: adamw
+num_layers: -1          # alle 24 Transformer-Bloecke, entspricht Kaggles all-linear-Reichweite
+
+batch_size: 2
+grad_accumulation_steps: 8
+max_seq_length: 1536    # Datensatz ist auf dieses Budget gefiltert -> keine Truncation
+grad_checkpoint: true
+
+# iters zaehlt Batches, nicht Optimizer-Schritte: 4000 iters x batch 2 = 8000 Beispiele,
+# also ~40% einer Epoche ueber den 20k-Datensatz. Das ist an das entspricht, was der Mac
+# in einer Nacht schafft — eine volle Epoche waere hier mehrtaegig.
+iters: 4000
+learning_rate: 1.0e-5
+
+lr_schedule:
+  name: cosine_decay
+  warmup: 100
+  warmup_init: 1.0e-7
+  arguments: [1.0e-5, 4000, 1.0e-6]
+
+lora_parameters:
+  keys:
+    - "self_attn.q_proj"
+    - "self_attn.k_proj"
+    - "self_attn.v_proj"
+    - "self_attn.o_proj"
+    - "mlp.up_proj"
+    - "mlp.down_proj"
+  rank: 16
+  scale: 20.0
+  dropout: 0.05
+
+adapter_path: "$HYDRA_TRAIN_DIR/adapters"
+save_every: 200
+steps_per_report: 10
+steps_per_eval: 200
+val_batches: 20
+seed: 42

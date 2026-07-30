@@ -1,0 +1,10 @@
+{%- for m in messages -%}
+{%- if m['role'] == 'tool' -%}
+[TOOL_RESULTS]{{ m['content'] }}[/TOOL_RESULTS]
+{%- else -%}
+<|{{ m['role'] }}_start|>{{ m['content'] }}<|{{ m['role'] }}_end|>
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+<|assistant_start|>
+{%- endif -%}

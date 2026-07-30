@@ -1,0 +1,29 @@
+# Morningstar-14B-Code — Dependencies
+# Training:  pip install -r requirements.txt
+# Inference: pip install torch transformers accelerate requests
+
+# Core
+torch>=2.1.0
+transformers>=4.44.0
+accelerate>=0.28.0
+safetensors>=0.4.0
+tokenizers>=0.15.0
+
+# QLoRA Training
+peft>=0.10.0
+bitsandbytes>=0.43.0
+trl>=0.8.0
+datasets>=2.18.0
+
+# Tokenizer
+sentencepiece>=0.1.99
+protobuf>=3.20.0
+
+# Dataset
+tqdm>=4.66.0
+
+# Inference / API
+requests>=2.31.0
+
+# Monitoring (optional)
+# wandb>=0.16.0
